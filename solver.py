@@ -1,9 +1,8 @@
-from gurobipy import Model, GRB
+from gurobipy import Model, GRB, quicksum
 from itertools import product
 
 sz = int(input("Enter the size of the square: "))
 
-coverage_ratio = 0.95
 max_area = sz * sz // 2
 lengths = range(1, sz + 1)
 S = [(i, j, w, h) for i in lengths for j in lengths
@@ -48,26 +47,24 @@ for w, h in iter_2d:
     if w * h >= max_area or w < h:  # Only check pairs where w >= h to break symmetry
         continue
     elif w == h:
-        m.addConstr(sum([x[i,j,w,w] for i, j in iter_2d]) <= 1)
+        m.addConstr(quicksum(x[i, j, w, w] for i, j in iter_2d) <= 1)
     else:
-        m.addConstr(sum([x[i,j,w,h] + x[i,j,h,w] for i, j in iter_2d]) <= 1)
+        m.addConstr(quicksum(x[i,j,w,h] + x[i,j,h,w] for i, j in iter_2d) <= 1)
 
 # Packing Constraint
-covered_squares = 0
-for i,j in iter_2d:
-    terms = 0
-    for w,h in iter_2d:
-        if w * h >= max_area:
-            continue
-        for a in range(0, min(i, w)):
-            for b in range(0, min(j, h)):
-                if (i - a, j - b, w, h) in S:
-                    terms += x[i - a, j - b, w, h]
-    m.addConstr(terms <= 1, name=f"packing1_{i}_{j}")
-    covered_squares += terms
-
-# Coverage Constraint
-m.addConstr(covered_squares >= coverage_ratio * sz * sz, name="coverage_constraint")
+for i, j in iter_2d:
+    m.addConstr(
+        quicksum(
+            x[i - a, j - b, w, h]
+            for w, h in iter_2d
+            if w * h < max_area
+            for a in range(0, min(i, w))
+            for b in range(0, min(j, h))
+            if (i - a, j - b, w, h) in S
+        ) == 1,
+        name=f"packing1_{i}_{j}"
+    )
+    # covered_squares += terms
 
 m.setObjective(Amax - Amin, GRB.MINIMIZE)
 m.optimize()
