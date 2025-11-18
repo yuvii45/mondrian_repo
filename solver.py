@@ -64,7 +64,6 @@ for i,j in iter_2d:
                 if (i - a, j - b, w, h) in S:
                     terms += x[i - a, j - b, w, h]
     m.addConstr(terms <= 1, name=f"packing1_{i}_{j}")
-    m.addConstr(0 <= terms, name=f"packing0_{i}_{j}")
     covered_squares += terms
 
 # Coverage Constraint
