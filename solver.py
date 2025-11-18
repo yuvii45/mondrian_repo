@@ -3,6 +3,7 @@ from itertools import product
 
 sz = int(input("Enter the size of the square: "))
 
+coverage_ratio = 0.95
 max_area = sz * sz // 2
 lengths = range(1, sz + 1)
 S = [(i, j, w, h) for i in lengths for j in lengths
@@ -17,13 +18,14 @@ x = m.addVars(S, vtype=GRB.BINARY, name="x")
 Amax = m.addVar(lb=0, ub=max_area, vtype=GRB.INTEGER, name="Amax")
 Amin = m.addVar(lb=0, ub=max_area, vtype=GRB.INTEGER, name="Amin")
 
-# Define upper bound on area
+# Upper Bound Constraints (Bassen)
 if sz % 2 == 0:
     m.addConstr(Amax - Amin <= 2 * sz, name="upper_bound")
 else:
     m.addConstr(Amax - Amin <= sz, name="upper_bound")
 
-# m.addConstr(Amax - Amin >= 1 + sz / 10, name="lower_bound")    
+# Lower Bound Constraint (non-negative)
+m.addConstr(Amax - Amin >= 0, name="lower_bound")    
 
 # Defining Amax and Amin
 m.addConstrs(
@@ -51,20 +53,27 @@ for w, h in iter_2d:
         m.addConstr(sum([x[i,j,w,h] + x[i,j,h,w] for i, j in iter_2d]) <= 1)
 
 # Packing Constraint
+covered_squares = 0
 for i,j in iter_2d:
-    terms = []
+    terms = 0
     for w,h in iter_2d:
+        if w * h >= max_area:
+            continue
         for a in range(0, min(i, w)):
             for b in range(0, min(j, h)):
                 if (i - a, j - b, w, h) in S:
-                    terms.append(x[i - a, j - b, w, h])
-    m.addConstr(sum(terms) == 1, name=f"packing_{i}_{j}")
+                    terms += x[i - a, j - b, w, h]
+    m.addConstr(terms <= 1, name=f"packing1_{i}_{j}")
+    m.addConstr(0 <= terms, name=f"packing0_{i}_{j}")
+    covered_squares += terms
+
+# Coverage Constraint
+m.addConstr(covered_squares >= coverage_ratio * sz * sz, name="coverage_constraint")
 
 m.setObjective(Amax - Amin, GRB.MINIMIZE)
-
-# Solve
 m.optimize()
 
+# Output Model Results
 if m.status == GRB.OPTIMAL:
     print("Optimal objective value:", m.objVal)
     for v in m.getVars():
