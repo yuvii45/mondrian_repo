@@ -1,6 +1,7 @@
 from gurobipy import Model, GRB, quicksum
 from itertools import product
 
+coverage_ratio = 0.90
 sz = int(input("Enter the size of the square: "))
 
 max_area = sz * sz // 2
@@ -14,6 +15,7 @@ m = Model("Mondrian Solver")
 m.Params.Seed = 42 
 
 x = m.addVars(S, vtype=GRB.BINARY, name="x")
+y = m.addVars(iter_2d, vtype=GRB.BINARY, name="y")
 Amax = m.addVar(lb=0, ub=max_area, vtype=GRB.INTEGER, name="Amax")
 Amin = m.addVar(lb=0, ub=max_area, vtype=GRB.INTEGER, name="Amin")
 
@@ -61,10 +63,10 @@ for i, j in iter_2d:
             for a in range(0, min(i, w))
             for b in range(0, min(j, h))
             if (i - a, j - b, w, h) in S
-        ) == 1,
+        ) == y[i, j],
         name=f"packing1_{i}_{j}"
     )
-    # covered_squares += terms
+m.addConstr(quicksum(y[i,j] for i,j in iter_2d) >= coverage_ratio * sz * sz)
 
 m.setObjective(Amax - Amin, GRB.MINIMIZE)
 m.optimize()
