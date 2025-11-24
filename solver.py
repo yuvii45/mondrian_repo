@@ -1,11 +1,12 @@
 from gurobipy import Model, GRB, quicksum
 from itertools import product
+from math import sqrt
 
 
 class MondrianSolver:
     def __init__(self, sz) -> None:
         self.sz = sz
-        self.max_area = sz * sz // 2
+        self.max_area = sz * sz / 2
         self.lengths = range(1, sz + 1)
         self.S = [(i, j, w, h) for i in self.lengths for j in self.lengths
             for w in self.lengths for h in self.lengths if w * h < self.max_area]
@@ -21,12 +22,8 @@ class MondrianSolver:
         self.Amin = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
 
     def defect_constraints(self):
-        if self.sz % 2 == 0:
-            self.m.addConstr(self.Amax - self.Amin <= 2 * self.sz, name="upper_bound")
-        else:
-            self.m.addConstr(self.Amax - self.Amin <= self.sz, name="upper_bound")
-
-        self.m.addConstr(self.Amax - self.Amin >= 0, name="lower_bound")    
+        self.m.addConstr(self.Amax - self.Amin <= 2.75 * sqrt(self.sz), name="upper_bound")
+        self.m.addConstr(self.Amax - self.Amin >= sqrt(self.sz), name="lower_bound")    
 
         # Defining Amax and Amin
         self.m.addConstrs(
