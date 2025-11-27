@@ -1,10 +1,12 @@
 from gurobipy import Model, GRB, quicksum
 from itertools import product
 from math import sqrt
+import sys
 
 
 class MondrianSolver:
     def __init__(self, sz) -> None:
+        self.coverage_ratio = 0.90
         self.sz = sz
         self.max_area = sz * sz / 2
         self.lengths = range(1, sz + 1)
@@ -21,6 +23,7 @@ class MondrianSolver:
         self.x = self.m.addVars(self.S, vtype=GRB.BINARY, name="x")
         self.Amax = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amax")
         self.Amin = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
+        self.y = self.m.addVars(self.iter_2d, vtype=GRB.BINARY, name="y")
 
     def defect_constraints(self):
         if self.sz % 2 == 0:
@@ -65,9 +68,10 @@ class MondrianSolver:
                     for a in range(0, min(i, w))
                     for b in range(0, min(j, h))
                     if (i - a, j - b, w, h) in self.S
-                ) == 1,
+                ) == self.y[i, j],
                 name=f"packing_{i}_{j}"
             )
+        self.m.addConstr(quicksum(self.y[i,j] for i,j in self.iter_2d) >= self.coverage_ratio * self.sz * self.sz)
 
     def optimize_and_output(self):
         self.m.setObjective(self.Amax - self.Amin, GRB.MINIMIZE)
@@ -92,7 +96,16 @@ class MondrianSolver:
             print("Optimization terminated with status:", self.m.status)
 
 def main():
-    sz = int(input("Enter the size of the square: "))
+    # Try to get sz from command-line argument
+    if len(sys.argv) > 1:
+        try:
+            sz = int(sys.argv[1])
+        except ValueError:
+            print("Invalid argument. sz must be an integer.")
+            return
+    else:
+        # Fallback: ask user
+        sz = int(input("Enter the size of the square: "))
     obj = MondrianSolver(sz)
     obj.initialize_model()
     obj.define_variables()
