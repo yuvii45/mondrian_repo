@@ -15,6 +15,7 @@ class MondrianSolver:
     def initialize_model(self):
         self.m = Model("Mondrian Solver")
         self.m.Params.Seed = 42 
+        self.m.Params.TimeLimit = 60 * 10  # 10 minutes timer
 
     def define_variables(self):
         self.x = self.m.addVars(self.S, vtype=GRB.BINARY, name="x")
@@ -22,8 +23,12 @@ class MondrianSolver:
         self.Amin = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
 
     def defect_constraints(self):
-        self.m.addConstr(self.Amax - self.Amin <= 2.75 * sqrt(self.sz), name="upper_bound")
-        self.m.addConstr(self.Amax - self.Amin >= sqrt(self.sz), name="lower_bound")    
+        if self.sz % 2 == 0:
+            self.m.addConstr(self.Amax - self.Amin <= 2 * (self.sz), name="upper_bound")    
+        else:
+            self.m.addConstr(self.Amax - self.Amin <= (self.sz), name="upper_bound")    
+
+        self.m.addConstr(self.Amax - self.Amin >= 0, name="lower_bound")    
 
         # Defining Amax and Amin
         self.m.addConstrs(
@@ -71,6 +76,11 @@ class MondrianSolver:
         # Output Model Results
         if self.m.status == GRB.OPTIMAL:
             print("Optimal objective value:", self.m.objVal)
+            for v in self.m.getVars():
+                if v.x != 0:
+                    print(f"Variable {v.varName}: {v.x}")
+        elif self.m.Status == GRB.TIME_LIMIT: 
+            print("Model Timed out:", self.m.objVal)
             for v in self.m.getVars():
                 if v.x != 0:
                     print(f"Variable {v.varName}: {v.x}")
