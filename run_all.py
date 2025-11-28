@@ -6,7 +6,7 @@ import os
 BASE = os.path.dirname(os.path.abspath(__file__))
 solver_path = os.path.join(BASE, "solver.py")
 
-for n in range(3, 11):
+for n in range(8, 9):
     outfile = os.path.join(BASE, f"output_{n}.txt")
     print(f"\n=== Running n={n} ===")
 

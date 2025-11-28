@@ -6,13 +6,28 @@ import sys
 
 class MondrianSolver:
     def __init__(self, sz) -> None:
-        self.coverage_ratio = 0.90
         self.sz = sz
         self.max_area = sz * sz / 2
-        self.lengths = range(1, sz + 1)
-        self.S = [(i, j, w, h) for i in self.lengths for j in self.lengths
-            for w in self.lengths for h in self.lengths if w * h < self.max_area]
-        self.iter_2d = list(product(self.lengths, repeat=2))
+        self.rect_sizes = list([i, j] for i in range(1,sz+1) for j in range(1,sz+1) if i * j <= self.max_area)
+        self.indices = list([i, j] for i in range(sz) for j in range(sz))
+        self.S = []
+        self.rect_index_map = {} # For each w x h rectangle, list of indices where it can be placed
+        
+        for w, h in self.rect_sizes:
+            self.rect_index_map[(w, h)] = []
+            for i in range(0, self.sz - w + 1):
+                for j in range(0, self.sz - h + 1):
+                    self.S.append((i, j, w, h))
+                    self.rect_index_map[(w, h)].append((i, j))
+
+        # Precompute for each cell (i,j) the list of rectangle placements that cover it
+        self.covers = {}  # (i,j) -> list of (i_rect, j_rect, w, h)
+        for i_cell, j_cell in self.indices:
+            self.covers[(i_cell, j_cell)] = []
+        for i_rect, j_rect, w, h in self.S:
+            for i_cell in range(i_rect, i_rect + w):
+                for j_cell in range(j_rect, j_rect + h):
+                    self.covers[(i_cell, j_cell)].append((i_rect, j_rect, w, h))
 
     def initialize_model(self):
         self.m = Model("Mondrian Solver")
@@ -21,9 +36,8 @@ class MondrianSolver:
 
     def define_variables(self):
         self.x = self.m.addVars(self.S, vtype=GRB.BINARY, name="x")
-        self.Amax = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amax")
-        self.Amin = self.m.addVar(lb=0, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
-        self.y = self.m.addVars(self.iter_2d, vtype=GRB.BINARY, name="y")
+        self.Amax = self.m.addVar(lb=1, ub=self.max_area, vtype=GRB.INTEGER, name="Amax")
+        self.Amin = self.m.addVar(lb=1, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
 
     def defect_constraints(self):
         if self.sz % 2 == 0:
@@ -43,36 +57,29 @@ class MondrianSolver:
             name="link_min"
         )
 
-    def boundary_constraint(self):
-        self.m.addConstrs(
-            (self.x[i, j, w, h] == 0 for i, j, w, h in self.S if i + w > self.sz + 1 or j + h > self.sz + 1), \
-            name="bdry_constraint"
-        )
-
     def non_congruency_constraint(self):
-        for w, h in self.iter_2d:
-            if w * h >= self.max_area or w < h:  # Only check pairs where w >= h to break symmetry
+        for w, h in self.rect_sizes:
+            if w < h:  # Only check pairs where w >= h to break symmetry
                 continue
             elif w == h:
-                self.m.addConstr(quicksum(self.x[i, j, w, w] for i, j in self.iter_2d) <= 1)
+                self.m.addConstr(quicksum(self.x[i, j, w, w] for i, j in self.rect_index_map[(w, w)]) <= 1)
             else:
-                self.m.addConstr(quicksum(self.x[i,j,w,h] + self.x[i,j,h,w] for i, j in self.iter_2d) <= 1)
+                # Rectangle shapes: sum over BOTH orientations
+                rect_positions = self.rect_index_map.get((w, h), [])
+                rotated_positions = self.rect_index_map.get((h, w), [])
+                
+                self.m.addConstr(
+                    quicksum(self.x[i, j, w, h] for i, j in rect_positions) +
+                    quicksum(self.x[i, j, h, w] for i, j in rotated_positions) <= 1
+                )
 
     def packing_constraint(self):
-        for i, j in self.iter_2d:
+        for i, j in self.indices:
             self.m.addConstr(
-                quicksum(
-                    self.x[i - a, j - b, w, h]
-                    for w, h in self.iter_2d
-                    if w * h < self.max_area
-                    for a in range(0, min(i, w))
-                    for b in range(0, min(j, h))
-                    if (i - a, j - b, w, h) in self.S
-                ) == self.y[i, j],
+                quicksum(self.x[i_rect, j_rect, w, h] for (i_rect, j_rect, w, h) in self.covers[(i,j)]) == 1,
                 name=f"packing_{i}_{j}"
             )
-        self.m.addConstr(quicksum(self.y[i,j] for i,j in self.iter_2d) >= self.coverage_ratio * self.sz * self.sz)
-
+        
     def optimize_and_output(self):
         self.m.setObjective(self.Amax - self.Amin, GRB.MINIMIZE)
         self.m.optimize()
@@ -111,7 +118,6 @@ def main():
     obj.define_variables()
 
     obj.defect_constraints()
-    obj.boundary_constraint()
     obj.non_congruency_constraint()
     obj.packing_constraint()
 
