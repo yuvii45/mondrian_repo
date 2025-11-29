@@ -36,8 +36,12 @@ class MondrianSolver:
 
     def define_variables(self):
         self.x = self.m.addVars(self.S, vtype=GRB.BINARY, name="x")
-        self.Amax = self.m.addVar(lb=1, ub=self.max_area, vtype=GRB.INTEGER, name="Amax")
-        self.Amin = self.m.addVar(lb=1, ub=self.max_area, vtype=GRB.INTEGER, name="Amin")
+        if self.sz % 2 == 0:
+            self.Amax = self.m.addVar(lb=1, ub=self.sz * (self.sz // 2 + 1), vtype=GRB.INTEGER, name="Amax")
+            self.Amin = self.m.addVar(lb=1, ub=self.sz * (self.sz // 2 - 1), vtype=GRB.INTEGER, name="Amin")
+        else:
+            self.Amax = self.m.addVar(lb=1, ub=self.sz * (self.sz + 1) // 2, vtype=GRB.INTEGER, name="Amax")
+            self.Amin = self.m.addVar(lb=1, ub=self.sz * (self.sz - 1) // 2, vtype=GRB.INTEGER, name="Amin")
 
     def defect_constraints(self):
         if self.sz % 2 == 0:
@@ -47,15 +51,9 @@ class MondrianSolver:
 
         self.m.addConstr(self.Amax - self.Amin >= 0, name="lower_bound")    
 
-        # Defining Amax and Amin
-        self.m.addConstrs(
-            (self.Amax >= w * h * self.x[i, j, w, h] for i, j, w, h in self.S),
-            name="link_max"
-        )
-        self.m.addConstrs(
-            (self.Amin <= w * h + (self.max_area - w * h) * (1 - self.x[i, j, w, h]) for i, j, w, h in self.S),
-            name="link_min"
-        )
+        for i,j,w,h in self.S:
+            self.m.addGenConstrIndicator(self.x[i,j,w,h], True, self.Amax >= w*h)
+            self.m.addGenConstrIndicator(self.x[i,j,w,h], True, self.Amin <= w*h)
 
     def non_congruency_constraint(self):
         for w, h in self.rect_sizes:
